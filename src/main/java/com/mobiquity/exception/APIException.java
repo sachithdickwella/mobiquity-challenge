@@ -1,12 +1,12 @@
 package com.mobiquity.exception;
 
 /**
- * Implementation of {@link Exception} which denotes a checked exception
+ * Implementation of {@link RuntimeException} which denotes a checked exception
  * during main functionality failure.
  *
  * @author Mobiquite
  */
-public class APIException extends Exception {
+public class APIException extends RuntimeException {
 
     public APIException(String message, Exception e) {
         super(message, e);
