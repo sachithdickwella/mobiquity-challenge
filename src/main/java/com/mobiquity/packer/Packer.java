@@ -189,7 +189,7 @@ public class Packer {
      * <br/>
      * <b>Note:</b>
      * Decorated with {@link SuppressWarnings} annotation to ignore the sonarlint warning of
-     * using {@link Stream#peek(Consumer)} method despite what said in the javadoc. As here,
+     * using {@link Stream#peek(Consumer)} method despite what said in the javadoc. At here,
      * we keep careful consideration of usage of {@code peek()}, thus, ignore the warning.
      *
      * @param entry an instance of {@link Map.Entry} (key-value) pair, weight limit as the
