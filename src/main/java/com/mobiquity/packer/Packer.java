@@ -9,11 +9,11 @@ import org.jetbrains.annotations.NotNull;
 import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
-import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -120,11 +120,22 @@ public class Packer {
      * <b>Behavior (For single line):</b>
      * <br/>
      * <ol>
-     * <li>Initially parameter {@code line }get split by {@code ':'} character to extract weight limit at
+     * <li>Parameter {@code line }get split by {@code ':'} character to extract weight limit at
      * the beginning of each line, trim it and set as the return {@link Map.Entry} key.</li>
-     * <li></li>
+     * <li>Use regular-expression to extract item details from second half of the split line and map
+     * the matching content into new {@link Item} objects respectively, retaining the data type.</li>
+     * <li>As item list extraction happens, sort the items by descending {@link Item#getPrice()} and
+     * ascending {@link Item#getWeight()} order for main item selection calculation.
+     * <br/>
+     * <br/>
+     * By doing so, item selection process' time-complexity have reduced by a significant amount. It's
+     * worst case scenario brought down to O(n) from potential O(n^2) (quadratic complexity).
+     * <br/>
+     * <br/>
+     * </li>
+     * <li>Return the final outcome of data extraction, sorting of the items and weight limit packed
+     * into a {@link Map.Entry}.</li>
      * </ol>
-     *
      *
      * @param line extracted from the input file which contains the weight limit and items details with
      *             miscellaneous characters that does not participate in the process.
@@ -144,8 +155,9 @@ public class Packer {
                                 .currency(result.group(3))
                                 .price(parseDouble(result.group(4)))
                                 .build())
-                        .sorted(comparing(Item::getPrice, reverseOrder())
-                                .thenComparing(Item::getWeight, naturalOrder()))
+                        .sorted(
+                                comparing(Item::getPrice, reverseOrder())
+                                        .thenComparing(Item::getWeight, naturalOrder()))
                         .collect(toList());
 
                 return new SimpleImmutableEntry<>(parseInt(split[0].trim()), items);
@@ -158,22 +170,41 @@ public class Packer {
     }
 
     /**
-     * @param entry an instance of {@link Map.Entry} (key-value) pair, weight limit
-     *              as the key and {@link List} of {@link Item}s as the value.
-     * @return
+     * Select the items from the give line, a.k.a. {@link Map.Entry} base off the weight
+     * limit and given item list details.
+     * <p>
+     * Given sorted list from upstream {@link #mapToItem(String)} method, here only has
+     * to search from top of the {@link Item}s list to the bottom.
+     * <p>
+     * In the worst case  scenario, matching items will be found in first few elements in
+     * the list. But, as the priority has given to the {@link Item#getPrice()} during sorting,
+     * there's no way to determine correct accumulated weight from the items without checking
+     * the entire list of items no matter what is the price.
+     * <p>
+     * Here, the operation is simple. Keep the sum of weights allowed to be in the package
+     * off stream variable (count) and as stream continues, filter-out the items that would
+     * exceed the package's weight limit, filtered-in items pass through the downstream, while
+     * updating the sum of weights (count) to check for next item from the upstream.
+     * <br/>
+     * <br/>
+     * <b>Note:</b>
+     * Decorated with {@link SuppressWarnings} annotation to ignore the sonarlint warning of
+     * using {@link Stream#peek(Consumer)} method despite what said in the javadoc. At here,
+     * we keep careful consideration of usage of {@code peek()}, thus, ignore the warning.
+     *
+     * @param entry an instance of {@link Map.Entry} (key-value) pair, weight limit as the
+     *              key and {@link List} of {@link Item}s as the value.
+     * @return a {@link Stream} of {@link Item}s chosen by given condition to include in a
+     * package to send.
      */
+    @SuppressWarnings("java:S3864")
     @NotNull
     private Stream<Item> selectItems(@NotNull Map.Entry<Integer, List<Item>> entry) {
-        var selected = new LinkedList<Item>();
         var count = new AtomicReference<>(0D);
 
-        entry.getValue().forEach(item -> {
-            if (count.get() + item.getWeight() <= entry.getKey()) {
-                selected.add(item);
-                count.accumulateAndGet(item.getWeight(), Double::sum);
-            }
-        });
-
-        return selected.stream();
+        return entry.getValue()
+                .stream()
+                .filter(item -> count.get() + item.getWeight() <= entry.getKey())
+                .peek(item -> count.accumulateAndGet(item.getWeight(), Double::sum));
     }
 }
