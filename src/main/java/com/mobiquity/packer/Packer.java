@@ -12,6 +12,7 @@ import java.nio.file.Files;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
@@ -19,7 +20,9 @@ import static java.lang.Double.parseDouble;
 import static java.lang.Integer.parseInt;
 import static java.lang.String.format;
 import static java.util.AbstractMap.SimpleImmutableEntry;
-import static java.util.Comparator.*;
+import static java.util.Comparator.comparing;
+import static java.util.Comparator.naturalOrder;
+import static java.util.Comparator.reverseOrder;
 import static java.util.stream.Collectors.joining;
 import static java.util.stream.Collectors.toList;
 
@@ -89,13 +92,13 @@ public class Packer {
     @NotNull
     private String selectItems(@NotNull Map.Entry<Integer, List<Item>> entry) {
         var selected = new LinkedList<Item>();
+        var count = new AtomicReference<>(0D);
 
         entry.getValue().forEach(item -> {
-            var sum = selected.stream()
-                    .mapToDouble(Item::getWeight)
-                    .sum();
-
-            if (sum + item.getWeight() <= entry.getKey()) selected.add(item);
+            if (count.get() + item.getWeight() <= entry.getKey()) {
+                selected.add(item);
+                count.accumulateAndGet(item.getWeight(), Double::sum);
+            }
         });
 
         return selected.isEmpty() ? "-" : selected.stream()
